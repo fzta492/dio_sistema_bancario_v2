@@ -43,7 +43,7 @@ O sistema é organizado em abas para facilitar a navegação e o uso:
 * **Interface Reativa:** Os componentes da interface são atualizados dinamicamente conforme as ações do usuário.
 
 ## Tecnologias Utilizadas
-* **Python 3.x**
+* **Python 3.13**
 * **Flet:** Framework Python para criação de interfaces gráficas web, desktop e mobile.
 
 ## Pré-requisitos
