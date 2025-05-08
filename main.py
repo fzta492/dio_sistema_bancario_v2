@@ -1,5 +1,5 @@
 import flet
-from flet import Page, Tabs, Tab, Column, TextField, ElevatedButton, Row, Text, Divider, DataTable, DataRow, DataCell, DataColumn, Dropdown, DropdownOption, SnackBar, TextStyle
+from flet import Page, Tabs, Tab, Column, TextField, ElevatedButton, Row, Text, Divider, DataTable, DataRow, DataCell, DataColumn, Dropdown, DropdownOption, SnackBar, TextStyle, ListView
 
 
 def main(page: Page):
@@ -10,14 +10,12 @@ def main(page: Page):
     usuarios = []
     contas = []
     proximo_numero_conta = 1
-    logs_usuario = []
-    logs_conta = []
-    logs_operacoes = []
 
     # Campo de logs
-    logs_usuario_field = TextField(label="Logs Usuários", width=800, height=100, multiline=True, disabled=True, text_style=TextStyle(color="black"))
-    logs_conta_field = TextField(label="Logs Contas", width=800, height=100, multiline=True, disabled=True, text_style=TextStyle(color="black"))
-    logs_operacoes_field = TextField(label="Logs Operações", width=800, height=100, multiline=True, disabled=True, text_style=TextStyle(color="black"))
+    # Views de logs com scroll
+    logs_usuario_list = ListView(width=800, height=100, auto_scroll=True)
+    logs_conta_list = ListView(width=800, height=100, auto_scroll=True)
+    logs_operacoes_list = ListView(width=800, height=100, auto_scroll=True)
 
     # Controles Usuário
     cpf_field = TextField(label="CPF (somente números)", width=200)
@@ -47,21 +45,20 @@ def main(page: Page):
     valor_saque_field = TextField(label="Valor Saque", width=150)
     sacar_btn = ElevatedButton("Sacar")
     extrato_btn = ElevatedButton("Extrato")
-    extrato_field = TextField(label="Extrato", width=600, height=200, multiline=True, disabled=True)
+    extrato_list = ListView(width=600, height=200, auto_scroll=True)
 
     # Funções auxiliares
     def log(msg):
         idx = tabs.selected_index
         if idx == 0:
-            logs_usuario.append(msg)
-            logs_usuario_field.value = "\n".join(logs_usuario)
+            logs_usuario_list.controls.append(Text(msg, color="black"))
+            logs_usuario_list.update()
         elif idx == 1:
-            logs_conta.append(msg)
-            logs_conta_field.value = "\n".join(logs_conta)
+            logs_conta_list.controls.append(Text(msg, color="black"))
+            logs_conta_list.update()
         elif idx == 2:
-            logs_operacoes.append(msg)
-            logs_operacoes_field.value = "\n".join(logs_operacoes)
-        page.update()
+            logs_operacoes_list.controls.append(Text(msg, color="black"))
+            logs_operacoes_list.update()
 
     def show_message(msg):
         page.snack_bar = SnackBar(Text(msg))
@@ -209,10 +206,13 @@ def main(page: Page):
             return
         numero = int(conta_dropdown.value.split(" - ")[0])
         conta = next((c for c in contas if c["numero_conta"] == numero), None)
-        texto = conta["extrato"] or "Não foram realizadas movimentações."
-        texto += f"\nSaldo:\tR$ {conta['saldo']:.2f}"
-        extrato_field.value = texto
-        page.update()
+        # Atualiza lista de extrato
+        extrato_list.controls.clear()
+        linhas = conta["extrato"].split("\n") if conta["extrato"] else []
+        for linha in linhas:
+            extrato_list.controls.append(Text(linha))
+        extrato_list.controls.append(Text(f"Saldo:\tR$ {conta['saldo']:.2f}"))
+        extrato_list.update()
         log(f"Extrato exibido conta {numero}")
 
     # Atribuição handlers
@@ -229,22 +229,22 @@ def main(page: Page):
         Row([cpf_field, nome_field]),
         Row([data_nasc_field, endereco_field]),
         criar_usuario_btn,
-        logs_usuario_field
+        logs_usuario_list
     ]))
     contas_tab = Tab(text="Contas", content=Column([
         Text("Contas"),
         Row([cpf_conta_field, criar_conta_btn]),
         listar_contas_btn,
         contas_table,
-        logs_conta_field
+        logs_conta_list
     ]))
     operacoes_tab = Tab(text="Operações", content=Column([
         Text("Operações"),
         conta_dropdown,
         Row([valor_deposito_field, depositar_btn]),
         Row([valor_saque_field, sacar_btn, extrato_btn]),
-        extrato_field,
-        logs_operacoes_field
+        extrato_list,
+        logs_operacoes_list
     ]))
     tabs = Tabs(selected_index=0, tabs=[usuarios_tab, contas_tab, operacoes_tab])
 
