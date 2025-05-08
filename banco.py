@@ -1,267 +1,255 @@
-import textwrap
-
-# --- Funções de Operações Bancárias ---
-
-def sacar(*, saldo, valor, extrato, limite_valor_saque, numero_saques_realizados, limite_saques_diarios):
-    """
-    Realiza um saque na conta.
-    Argumentos são keyword-only.
-    Retorna o novo saldo, o novo extrato e o novo número de saques realizados.
-    """
-    excedeu_saldo = valor > saldo
-    excedeu_limite_valor = valor > limite_valor_saque
-    excedeu_limites_saques = numero_saques_realizados >= limite_saques_diarios
-
-    if excedeu_saldo:
-        print("\n@@@ Operação falhou! Você não tem saldo suficiente. @@@")
-    elif excedeu_limite_valor:
-        print(f"\n@@@ Operação falhou! O valor do saque excede o limite de R$ {limite_valor_saque:.2f} por operação. @@@")
-    elif excedeu_limites_saques:
-        print(f"\n@@@ Operação falhou! Número máximo de {limite_saques_diarios} saques diários excedido. @@@")
-    elif valor > 0:
-        saldo -= valor
-        extrato += f"Saque:\t\tR$ {valor:.2f}\n"
-        numero_saques_realizados += 1
-        print("\n=== Saque realizado com sucesso! ===")
-    else:
-        print("\n@@@ Operação falhou! O valor informado é inválido. @@@")
-
-    return saldo, extrato, numero_saques_realizados
+import flet
+from flet import Page, Tabs, Tab, Column, TextField, ElevatedButton, Row, Text, Divider, DataTable, DataRow, DataCell, DataColumn, Dropdown, DropdownOption, SnackBar, TextStyle
 
 
-def depositar(saldo, valor, extrato, /):
-    """
-    Realiza um depósito na conta.
-    Argumentos são positional-only.
-    Retorna o novo saldo e o novo extrato.
-    """
-    if valor > 0:
-        saldo += valor
-        extrato += f"Depósito:\tR$ {valor:.2f}\n"
-        print("\n=== Depósito realizado com sucesso! ===")
-    else:
-        print("\n@@@ Operação falhou! O valor informado é inválido. @@@")
-    return saldo, extrato
+def main(page: Page):
+    page.title = "Sistema Bancário"
+    page.padding = 20
 
+    # Dados e logs
+    usuarios = []
+    contas = []
+    proximo_numero_conta = 1
+    logs_usuario = []
+    logs_conta = []
+    logs_operacoes = []
 
-def exibir_extrato(saldo, /, *, extrato):
-    """
-    Exibe o extrato da conta.
-    'saldo' é positional-only, 'extrato' é keyword-only.
-    """
-    print("\n================ EXTRATO ================")
-    print("Não foram realizadas movimentações." if not extrato else extrato)
-    print(f"\nSaldo:\t\tR$ {saldo:.2f}")
-    print("==========================================")
+    # Campo de logs
+    logs_usuario_field = TextField(label="Logs Usuários", width=800, height=100, multiline=True, disabled=True, text_style=TextStyle(color="black"))
+    logs_conta_field = TextField(label="Logs Contas", width=800, height=100, multiline=True, disabled=True, text_style=TextStyle(color="black"))
+    logs_operacoes_field = TextField(label="Logs Operações", width=800, height=100, multiline=True, disabled=True, text_style=TextStyle(color="black"))
 
+    # Controles Usuário
+    cpf_field = TextField(label="CPF (somente números)", width=200)
+    nome_field = TextField(label="Nome completo", width=300)
+    data_nasc_field = TextField(label="Data nascimento (DD/MM/AAAA)", width=200)
+    endereco_field = TextField(label="Endereço", width=400)
+    criar_usuario_btn = ElevatedButton("Criar Usuário")
 
-# --- Funções de Gerenciamento de Usuários e Contas ---
+    # Controles Conta
+    cpf_conta_field = TextField(label="CPF do usuário", width=200)
+    criar_conta_btn = ElevatedButton("Criar Conta")
+    listar_contas_btn = ElevatedButton("Listar Contas")
+    contas_table = DataTable(
+        columns=[
+            DataColumn(Text("Agência")),
+            DataColumn(Text("Número")),
+            DataColumn(Text("Titular")),
+            DataColumn(Text("Saldo")),
+        ],
+        rows=[]
+    )
 
-def criar_usuario(usuarios):
-    """Cria um novo usuário (cliente do banco)."""
-    cpf_input = input("Informe o CPF (somente números): ")
-    # Remove caracteres não numéricos do CPF
-    cpf = "".join(filter(str.isdigit, cpf_input))
+    # Controles Operações
+    conta_dropdown = Dropdown(label="Conta", width=300, options=[])
+    valor_deposito_field = TextField(label="Valor Depósito", width=150)
+    depositar_btn = ElevatedButton("Depositar")
+    valor_saque_field = TextField(label="Valor Saque", width=150)
+    sacar_btn = ElevatedButton("Sacar")
+    extrato_btn = ElevatedButton("Extrato")
+    extrato_field = TextField(label="Extrato", width=600, height=200, multiline=True, disabled=True)
 
-    if not cpf: # Verifica se o CPF ficou vazio após a limpeza
-        print("\n@@@ CPF inválido! Forneça apenas números. @@@")
-        return
+    # Funções auxiliares
+    def log(msg):
+        idx = tabs.selected_index
+        if idx == 0:
+            logs_usuario.append(msg)
+            logs_usuario_field.value = "\n".join(logs_usuario)
+        elif idx == 1:
+            logs_conta.append(msg)
+            logs_conta_field.value = "\n".join(logs_conta)
+        elif idx == 2:
+            logs_operacoes.append(msg)
+            logs_operacoes_field.value = "\n".join(logs_operacoes)
+        page.update()
 
-    usuario_existente = filtrar_usuario(cpf, usuarios)
-    if usuario_existente:
-        print("\n@@@ Já existe usuário com esse CPF! @@@")
-        return
+    def show_message(msg):
+        page.snack_bar = SnackBar(Text(msg))
+        page.snack_bar.open = True
+        page.update()
 
-    nome = input("Informe o nome completo: ")
-    data_nascimento = input("Informe a data de nascimento (DD/MM/AAAA): ")
-    endereco = input("Informe o endereço (logradouro, nro - bairro - cidade/sigla estado): ")
+    def update_contas_table():
+        contas_table.rows.clear()
+        for c in contas:
+            contas_table.rows.append(DataRow(cells=[
+                DataCell(Text(c["agencia"])),
+                DataCell(Text(str(c["numero_conta"]))),
+                DataCell(Text(c["usuario"]["nome"])),
+                DataCell(Text(f"R$ {c['saldo']:.2f}")),
+            ]))
+        page.update()
 
-    usuarios.append({"nome": nome, "data_nascimento": data_nascimento, "cpf": cpf, "endereco": endereco})
-    print("\n=== Usuário criado com sucesso! ===")
+    def update_conta_dropdown():
+        conta_dropdown.options = [
+            DropdownOption(f"{c['numero_conta']} - {c['usuario']['nome']}")
+            for c in contas
+        ]
+        page.update()
 
+    # Handlers
+    def on_criar_usuario(e):
+        nonlocal usuarios
+        cpf_valor = "".join(filter(str.isdigit, cpf_field.value or ""))
+        if not cpf_valor:
+            show_message("CPF inválido!")
+            log("Falha criar usuário: CPF inválido")
+            return
+        if any(u["cpf"] == cpf_valor for u in usuarios):
+            show_message("CPF já cadastrado!")
+            log(f"Falha criar usuário: CPF {cpf_valor} já existe")
+            return
+        usuarios.append({
+            "cpf": cpf_valor,
+            "nome": nome_field.value or "",
+            "data_nascimento": data_nasc_field.value or "",
+            "endereco": endereco_field.value or ""
+        })
+        show_message("Usuário criado com sucesso!")
+        log(f"Usuário criado: CPF {cpf_valor}, Nome {nome_field.value}")
+        cpf_field.value = nome_field.value = data_nasc_field.value = endereco_field.value = ""
+        page.update()
 
-def filtrar_usuario(cpf, usuarios):
-    """Busca um usuário na lista de usuários pelo CPF."""
-    usuarios_filtrados = [usuario for usuario in usuarios if usuario["cpf"] == cpf]
-    return usuarios_filtrados[0] if usuarios_filtrados else None
-
-
-def criar_conta_corrente(agencia_padrao, proximo_numero_conta, usuarios, contas):
-    """Cria uma nova conta corrente vinculada a um usuário."""
-    if not usuarios:
-        print("\n@@@ Nenhum usuário cadastrado. Crie um usuário antes de abrir uma conta. @@@")
-        return proximo_numero_conta # Retorna o mesmo número, pois a conta não foi criada
-
-    cpf_input = input("Informe o CPF do usuário para vincular a conta: ")
-    cpf = "".join(filter(str.isdigit, cpf_input))
-
-    if not cpf:
-        print("\n@@@ CPF inválido para vincular a conta! Forneça apenas números. @@@")
-        return proximo_numero_conta
-
-    usuario = filtrar_usuario(cpf, usuarios)
-
-    if usuario:
-        nova_conta = {
-            "agencia": agencia_padrao,
+    def on_criar_conta(e):
+        nonlocal contas, proximo_numero_conta
+        if not usuarios:
+            show_message("Nenhum usuário cadastrado.")
+            log("Falha criar conta: sem usuários cadastrados")
+            return
+        cpf_valor = "".join(filter(str.isdigit, cpf_conta_field.value or ""))
+        usuario = next((u for u in usuarios if u["cpf"] == cpf_valor), None)
+        if not usuario:
+            show_message("Usuário não encontrado!")
+            log(f"Falha criar conta: CPF {cpf_valor} não encontrado")
+            return
+        nova = {
+            "agencia": "0001",
             "numero_conta": proximo_numero_conta,
-            "usuario": usuario, # Armazena a referência do dicionário do usuário
+            "usuario": usuario,
             "saldo": 0.0,
             "extrato": "",
-            "numero_saques_realizados_hoje": 0,
+            "numero_saques_realizados_hoje": 0
         }
-        contas.append(nova_conta)
-        print(f"\n=== Conta corrente número {proximo_numero_conta} criada com sucesso para o usuário {usuario['nome']}! ===")
-        return proximo_numero_conta + 1 # Retorna o próximo número de conta a ser usado
-    else:
-        print("\n@@@ Usuário com CPF informado não encontrado! Fluxo de criação de conta encerrado. @@@")
-        return proximo_numero_conta # Retorna o mesmo número, pois a conta não foi criada
+        contas.append(nova)
+        proximo_numero_conta += 1
+        show_message("Conta criada com sucesso!")
+        log(f"Conta {nova['numero_conta']} criada para CPF {cpf_valor}")
+        cpf_conta_field.value = ""
+        update_contas_table()
+        update_conta_dropdown()
+
+    def on_listar_contas(e):
+        update_contas_table()
+        log("Listagem de contas atualizada")
+
+    def on_depositar(e):
+        if not conta_dropdown.value:
+            show_message("Selecione uma conta.")
+            log("Falha depósito: conta não selecionada")
+            return
+        numero = int(conta_dropdown.value.split(" - ")[0])
+        conta = next((c for c in contas if c["numero_conta"] == numero), None)
+        try:
+            valor = float(valor_deposito_field.value or "0")
+        except:
+            show_message("Valor de depósito inválido.")
+            log("Falha depósito: valor inválido")
+            return
+        if valor <= 0:
+            show_message("Valor de depósito inválido.")
+            log("Falha depósito: valor não positivo")
+            return
+        conta["saldo"] += valor
+        conta["extrato"] += f"Depósito:\tR$ {valor:.2f}\n"
+        show_message("Depósito realizado com sucesso!")
+        log(f"Depósito R$ {valor:.2f} na conta {numero}")
+        valor_deposito_field.value = ""
+        update_contas_table()
+
+    def on_sacar(e):
+        if not conta_dropdown.value:
+            show_message("Selecione uma conta.")
+            log("Falha saque: conta não selecionada")
+            return
+        numero = int(conta_dropdown.value.split(" - ")[0])
+        conta = next((c for c in contas if c["numero_conta"] == numero), None)
+        try:
+            valor = float(valor_saque_field.value or "0")
+        except:
+            show_message("Valor de saque inválido.")
+            log("Falha saque: valor inválido")
+            return
+        if valor <= 0:
+            show_message("Valor de saque inválido.")
+            log("Falha saque: valor não positivo")
+            return
+        if valor > conta["saldo"]:
+            show_message("Saldo insuficiente.")
+            log(f"Falha saque: saldo insuficiente conta {numero}")
+            return
+        if valor > 500:
+            show_message("Valor excede limite por saque (R$ 500).")
+            log(f"Falha saque: valor {valor:.2f} excede limite")
+            return
+        if conta["numero_saques_realizados_hoje"] >= 3:
+            show_message("Limite de saques diários excedido.")
+            log(f"Falha saque: limite diário atingido conta {numero}")
+            return
+        conta["saldo"] -= valor
+        conta["extrato"] += f"Saque:\t\tR$ {valor:.2f}\n"
+        conta["numero_saques_realizados_hoje"] += 1
+        show_message("Saque realizado com sucesso!")
+        log(f"Saque R$ {valor:.2f} na conta {numero}")
+        valor_saque_field.value = ""
+        update_contas_table()
+
+    def on_extrato(e):
+        if not conta_dropdown.value:
+            show_message("Selecione uma conta.")
+            log("Falha extrato: conta não selecionada")
+            return
+        numero = int(conta_dropdown.value.split(" - ")[0])
+        conta = next((c for c in contas if c["numero_conta"] == numero), None)
+        texto = conta["extrato"] or "Não foram realizadas movimentações."
+        texto += f"\nSaldo:\tR$ {conta['saldo']:.2f}"
+        extrato_field.value = texto
+        page.update()
+        log(f"Extrato exibido conta {numero}")
+
+    # Atribuição handlers
+    criar_usuario_btn.on_click = on_criar_usuario
+    criar_conta_btn.on_click = on_criar_conta
+    listar_contas_btn.on_click = on_listar_contas
+    depositar_btn.on_click = on_depositar
+    sacar_btn.on_click = on_sacar
+    extrato_btn.on_click = on_extrato
+
+    # Montagem de abas
+    usuarios_tab = Tab(text="Usuários", content=Column([
+        Text("Criar Usuário"),
+        Row([cpf_field, nome_field]),
+        Row([data_nasc_field, endereco_field]),
+        criar_usuario_btn,
+        logs_usuario_field
+    ]))
+    contas_tab = Tab(text="Contas", content=Column([
+        Text("Contas"),
+        Row([cpf_conta_field, criar_conta_btn]),
+        listar_contas_btn,
+        contas_table,
+        logs_conta_field
+    ]))
+    operacoes_tab = Tab(text="Operações", content=Column([
+        Text("Operações"),
+        conta_dropdown,
+        Row([valor_deposito_field, depositar_btn]),
+        Row([valor_saque_field, sacar_btn, extrato_btn]),
+        extrato_field,
+        logs_operacoes_field
+    ]))
+    tabs = Tabs(selected_index=0, tabs=[usuarios_tab, contas_tab, operacoes_tab])
+
+    page.add(tabs)
+    page.update()
 
 
-def listar_contas(contas):
-    """Lista todas as contas correntes cadastradas."""
-    if not contas:
-        print("\n@@@ Nenhuma conta cadastrada. @@@")
-        return
-
-    print("\n================ LISTA DE CONTAS ================")
-    for conta in contas:
-        linha = f"""\
-            Agência:\t{conta['agencia']}
-            C/C:\t\t{conta['numero_conta']}
-            Titular:\t{conta['usuario']['nome']} (CPF: {conta['usuario']['cpf']})
-            Saldo:\t\tR$ {conta['saldo']:.2f}
-        """
-        print(textwrap.dedent(linha))
-        print("------------------------------------------")
-    print("==============================================")
-
-
-def selecionar_conta_para_operacao(contas):
-    """Permite ao usuário selecionar uma conta para realizar operações."""
-    if not contas:
-        print("\n@@@ Nenhuma conta cadastrada para realizar operações. @@@")
-        return None
-
-    listar_contas(contas) # Mostra as contas disponíveis
-    
-    try:
-        num_conta_selecionada_str = input("Digite o número da conta para realizar a operação: ")
-        if not num_conta_selecionada_str.isdigit():
-            print("\n@@@ Número da conta inválido. Deve ser um número. @@@")
-            return None
-        num_conta_selecionada = int(num_conta_selecionada_str)
-
-        for conta in contas:
-            if conta["numero_conta"] == num_conta_selecionada:
-                return conta
-        print("\n@@@ Conta não encontrada. @@@")
-        return None
-    except ValueError: # Caso a conversão para int falhe (embora o isdigit já cubra)
-        print("\n@@@ Entrada inválida para o número da conta. @@@")
-        return None
-
-# --- Função Principal (Menu) ---
-
-def menu():
-    """Exibe o menu principal e gerencia a interação com o usuário."""
-    AGENCIA_PADRAO = "0001"
-    VALOR_LIMITE_POR_SAQUE = 500  # R$ 500,00 por saque
-    LIMITE_SAQUES_DIARIOS = 3     # Máximo de 3 saques por dia por conta
-
-    usuarios = []  # Lista para armazenar dicionários de usuários
-    contas = []    # Lista para armazenar dicionários de contas
-    proximo_numero_conta_disponivel = 1
-
-    texto_menu = """
-    ================ MENU ================
-    [d]\tDepositar
-    [s]\tSacar
-    [e]\tExibir Extrato
-    [nu]\tNovo Usuário
-    [nc]\tNova Conta
-    [lc]\tListar Contas
-    [q]\tSair
-    => """
-
-    while True:
-        opcao = input(textwrap.dedent(texto_menu)).strip().lower()
-
-        if opcao == "d":
-            print("\n--- Depósito ---")
-            conta_selecionada = selecionar_conta_para_operacao(contas)
-            if conta_selecionada:
-                try:
-                    valor_str = input(f"Informe o valor do depósito para a conta {conta_selecionada['numero_conta']}: R$ ")
-                    valor = float(valor_str)
-                    
-                    novo_saldo, novo_extrato = depositar(
-                        conta_selecionada["saldo"],
-                        valor,
-                        conta_selecionada["extrato"]
-                    )
-                    conta_selecionada["saldo"] = novo_saldo
-                    conta_selecionada["extrato"] = novo_extrato
-                except ValueError:
-                    print("\n@@@ Valor de depósito inválido. Por favor, insira um número. @@@")
-
-        elif opcao == "s":
-            print("\n--- Saque ---")
-            conta_selecionada = selecionar_conta_para_operacao(contas)
-            if conta_selecionada:
-                try:
-                    valor_str = input(f"Informe o valor do saque para a conta {conta_selecionada['numero_conta']}: R$ ")
-                    valor = float(valor_str)
-
-                    novo_saldo, novo_extrato, novo_num_saques = sacar(
-                        saldo=conta_selecionada["saldo"],
-                        valor=valor,
-                        extrato=conta_selecionada["extrato"],
-                        limite_valor_saque=VALOR_LIMITE_POR_SAQUE,
-                        numero_saques_realizados=conta_selecionada["numero_saques_realizados_hoje"],
-                        limite_saques_diarios=LIMITE_SAQUES_DIARIOS
-                    )
-                    conta_selecionada["saldo"] = novo_saldo
-                    conta_selecionada["extrato"] = novo_extrato
-                    conta_selecionada["numero_saques_realizados_hoje"] = novo_num_saques
-                except ValueError:
-                    print("\n@@@ Valor de saque inválido. Por favor, insira um número. @@@")
-        
-        elif opcao == "e":
-            print("\n--- Extrato ---")
-            conta_selecionada = selecionar_conta_para_operacao(contas)
-            if conta_selecionada:
-                exibir_extrato(
-                    conta_selecionada["saldo"],
-                    extrato=conta_selecionada["extrato"]
-                )
-
-        elif opcao == "nu":
-            print("\n--- Novo Usuário ---")
-            criar_usuario(usuarios)
-
-        elif opcao == "nc":
-            print("\n--- Nova Conta ---")
-            numero_conta_atualizado = criar_conta_corrente(
-                AGENCIA_PADRAO,
-                proximo_numero_conta_disponivel,
-                usuarios,
-                contas
-            )
-            # Atualiza o próximo número de conta apenas se uma nova conta foi realmente criada
-            if numero_conta_atualizado > proximo_numero_conta_disponivel:
-                 proximo_numero_conta_disponivel = numero_conta_atualizado
-
-        elif opcao == "lc":
-            listar_contas(contas)
-
-        elif opcao == "q":
-            print("\n Saindo do sistema... Obrigado por usar nossos serviços!")
-            break
-
-        else:
-            print("\n@@@ Operação inválida, por favor selecione novamente a operação desejada. @@@")
-
-# --- Ponto de Entrada do Programa ---
-if __name__ == "__main__":
-    menu()
+flet.app(target=main) 
